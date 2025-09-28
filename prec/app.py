@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from supabase import Client, create_client
 
+from .eval import ResponseEvaluator
 from .openai_client import OpenAIChatClient, OpenAIEmbeddingClient
 from .service import ChatbotService
 from .settings import Settings
@@ -32,6 +33,10 @@ class QueryRequest(BaseModel):
     top_k: Optional[int] = Field(
         8, ge=1, le=20, description="Number of relevant chunks to retrieve"
     )
+    with_evaluation: Optional[bool] = Field(
+        None,
+        description="Set to true to enable evaluation scoring for this query.",
+    )
 
 
 class SourceChunk(BaseModel):
@@ -42,9 +47,19 @@ class SourceChunk(BaseModel):
     text: str
 
 
+class EvaluationResultSchema(BaseModel):
+    quality_score: float
+    speed_score: float
+    final_score: float
+    latency_seconds: float
+    reasoning: str
+
+
 class QueryResponse(BaseModel):
     answer: str
     sources: List[SourceChunk]
+    latency_seconds: float
+    evaluation: Optional[EvaluationResultSchema] = None
 
 
 def create_chatbot_service(settings: Settings | None = None) -> ChatbotService:
@@ -65,10 +80,23 @@ def create_chatbot_service(settings: Settings | None = None) -> ChatbotService:
         model=settings.openai_chat_model,
     )
 
+    evaluator_client = OpenAIChatClient(
+        api_key=settings.openai_api_key,
+        model=settings.evaluation_model,
+    )
+    evaluator = ResponseEvaluator(
+        evaluator_client,
+        quality_weight=settings.evaluation_quality_weight,
+        speed_weight=settings.evaluation_speed_weight,
+        target_latency=settings.evaluation_target_latency,
+    )
+
     return ChatbotService(
         embeddings=embeddings_client,
         chat=chat_client,
         vector_store=vector_store,
+        evaluator=evaluator,
+        evaluation_default=settings.evaluation_enabled,
         chunk_size=settings.chunk_size,
         chunk_overlap=settings.chunk_overlap,
     )
@@ -104,7 +132,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def query_bot(request: QueryRequest) -> QueryResponse:
         service: ChatbotService = app.state.chatbot_service
         try:
-            result = service.answer(request.question, top_k=request.top_k or 5)
+            result = service.answer(
+                request.question,
+                top_k=request.top_k or 8,
+                with_evaluation=request.with_evaluation,
+            )
         except (ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:  # pragma: no cover - defensive
@@ -120,6 +152,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             for item in result["sources"]
         ]
-        return QueryResponse(answer=result["answer"], sources=sources)
+        evaluation_payload = result.get("evaluation")
+        evaluation = None
+        if evaluation_payload:
+            evaluation = EvaluationResultSchema(**evaluation_payload)
+
+        return QueryResponse(
+            answer=result["answer"],
+            sources=sources,
+            latency_seconds=result.get("latency_seconds", 0.0),
+            evaluation=evaluation,
+        )
 
     return app
