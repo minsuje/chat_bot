@@ -79,13 +79,20 @@ def _handle_query(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        result = service.answer(args.question, top_k=args.top_k)
+        result = service.answer(
+            args.question,
+            top_k=args.top_k,
+            with_evaluation=args.with_eval,
+        )
     except Exception as exc:
         print(f"Query failed: {exc}", file=sys.stderr)
         return 1
 
     print("Answer:\n")
     print(result["answer"].strip())
+    latency_seconds = float(result.get("latency_seconds", 0.0) or 0.0)
+    latency_ms = latency_seconds * 1000.0
+    print(f"\nLatency: {latency_ms:.0f} ms")
     print("\nSources:")
     for source in result["sources"]:
         location = source["source"]
@@ -93,6 +100,19 @@ def _handle_query(args: argparse.Namespace) -> int:
             location = f"{location} (page {source['page']})"
         score = f"{source['score']:.4f}" if source.get("score") is not None else "n/a"
         print(f"- [{score}] {location}\n  {source['text'][:300]}" + ("..." if len(source['text']) > 300 else ""))
+
+    evaluation = result.get("evaluation")
+    if evaluation:
+        print("\nEvaluation:")
+        eval_latency = float(evaluation.get("latency_seconds", latency_seconds) or 0.0)
+        eval_latency_ms = eval_latency * 1000.0
+        print(
+            f"  Quality: {evaluation['quality_score']:.3f}\n"
+            f"  Speed:   {evaluation['speed_score']:.3f}\n"
+            f"  Final:   {evaluation['final_score']:.3f}\n"
+            f"  Latency: {eval_latency_ms:.0f} ms\n"
+            f"  Reason:  {evaluation['reasoning']}"
+        )
     return 0
 
 
@@ -138,6 +158,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=8,
         help="Number of relevant chunks to retrieve (default: 8).",
+    )
+    query_parser.add_argument(
+        "--with-eval",
+        action="store_true",
+        help="Run LLM-based self-evaluation and scoring.",
     )
     query_parser.set_defaults(func=_handle_query)
 

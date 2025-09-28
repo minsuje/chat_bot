@@ -2,7 +2,7 @@
 
 임산부, 임신 예정자, 영유아 관련 정책 PDF를 읽고 답변하는 챗봇의 백엔드
 MVP입니다. CLI를 통해 로컬 PDF를 Supabase(pgvector)에 업서트하고 OpenAI
-`gpt-4.1-mini` 모델로 질의를 수행하며, 필요하면 FastAPI HTTP API도 제공합니다.
+`gpt-4.1` 모델로 질의를 수행하며, 필요하면 FastAPI HTTP API도 제공합니다.
 
 ## 구현된 기능
 
@@ -50,17 +50,22 @@ python -m pip install -e .
 
 ## 환경 변수
 
-| 변수 | 필수 | 기본값 | 설명 |
-| --- | --- | --- | --- |
-| `OPENAI_API_KEY` | ✅ | 없음 | OpenAI API 키 |
-| `OPENAI_CHAT_MODEL` | ❌ | `gpt-4.1-mini` | 답변 생성 모델 |
-| `OPENAI_EMBEDDING_MODEL` | ❌ | `text-embedding-3-small` | 임베딩 모델 (1536차원) |
-| `SUPABASE_URL` | ✅ | 없음 | Supabase 프로젝트 URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | 없음 | Supabase 서비스 롤 키 (`SUPABASE_ANON_KEY` 대체 가능) |
-| `SUPABASE_TABLE` | ❌ | `policy_chunks` | 임베딩 저장 테이블 |
-| `SUPABASE_QUERY_FUNCTION` | ❌ | `match_policy_chunks` | 벡터 검색 RPC 함수 |
-| `CHUNK_SIZE` / `CHUNK_OVERLAP` | ❌ | `1200` / `200` | PDF 청크 크기와 중첩 |
-| `HOST` / `PORT` | ❌ | `0.0.0.0` / `8000` | `serve` 커맨드/HTTP 서버 바인딩 |
+| 변수                           | 필수 | 기본값                   | 설명                                                  |
+| ------------------------------ | ---- | ------------------------ | ----------------------------------------------------- |
+| `OPENAI_API_KEY`               | ✅   | 없음                     | OpenAI API 키                                         |
+| `OPENAI_CHAT_MODEL`            | ❌   | `gpt-4.1-mini`           | 답변 생성 모델                                        |
+| `OPENAI_EMBEDDING_MODEL`       | ❌   | `text-embedding-3-small` | 임베딩 모델 (1536차원)                                |
+| `SUPABASE_URL`                 | ✅   | 없음                     | Supabase 프로젝트 URL                                 |
+| `SUPABASE_SERVICE_ROLE_KEY`    | ✅   | 없음                     | Supabase 서비스 롤 키 (`SUPABASE_ANON_KEY` 대체 가능) |
+| `SUPABASE_TABLE`               | ❌   | `policy_chunks`          | 임베딩 저장 테이블                                    |
+| `SUPABASE_QUERY_FUNCTION`      | ❌   | `match_policy_chunks`    | 벡터 검색 RPC 함수                                    |
+| `CHUNK_SIZE` / `CHUNK_OVERLAP` | ❌   | `1200` / `200`           | PDF 청크 크기와 중첩                                  |
+| `HOST` / `PORT`                | ❌   | `0.0.0.0` / `8000`       | `serve` 커맨드/HTTP 서버 바인딩                       |
+| `ENABLE_EVALUATION`            | ❌   | `false`                  | 기본적으로 LLM 평가를 수행할지 여부                   |
+| `EVALUATION_MODEL`             | ❌   | `gpt-4.1-mini`           | 평가에 사용할 챗 모델                                  |
+| `EVALUATION_QUALITY_WEIGHT`    | ❌   | `0.7`                    | 품질 점수 가중치                                      |
+| `EVALUATION_SPEED_WEIGHT`      | ❌   | `0.3`                    | 속도 점수 가중치                                      |
+| `EVALUATION_TARGET_LATENCY`    | ❌   | `5.0`                    | 속도 점수 1.0을 기대하는 기준 응답 시간(초)           |
 
 루트 디렉터리에 `.env` 파일을 두면 자동으로 로드됩니다.
 
@@ -89,6 +94,7 @@ python -m pip install -e .
      with (lists = 100);
    ```
 4. RPC 함수 정리 및 재생성 (기존 버전이 있다면 삭제 후 생성)
+
    ```sql
    drop function if exists match_policy_chunks(vector, int, jsonb);
    drop function if exists match_policy_chunks(vector, int);
@@ -127,6 +133,7 @@ python -m pip install -e .
 ## CLI 사용법
 
 1. **PDF 업서트**
+
    ```bash
    # macOS / Linux
    python main.py ingest /path/to/pdf_dir --recursive
@@ -134,21 +141,29 @@ python -m pip install -e .
    # Windows PowerShell(경로에 공백/한글 포함 시 따옴표로 감싸기)
    python main.py ingest "C:\\경로\\정책자료" --recursive
    ```
+
    - 파일과 디렉터리를 혼합해 지정 가능
    - `--recursive`로 하위 디렉터리까지 탐색
    - 처리된 문서 수와 생성된 청크 수를 출력
 
 2. **질문하기**
-   ```bash
-   # macOS / Linux
-   python main.py ask "임산부 의료비 지원 정책은 어떤 것이 있나요?" --top-k 8
 
-   # Windows PowerShell
-   python main.py ask "사업 기간은 언제까지인가?" --top-k 8
-   ```
-   - 답변과 함께 참조된 청크의 파일 경로, 페이지, 유사도, 텍스트를 출력
+```bash
+# macOS / Linux
+python main.py ask "임산부 의료비 지원 정책은 어떤 것이 있나요?" --top-k 8
+
+# Windows PowerShell
+python main.py ask "사업 기간은 언제까지인가?" --top-k 8
+
+# 평가까지 함께 실행하고 싶다면 --with-eval 플래그 사용
+python main.py ask "사업 기간은 언제까지인가?" --top-k 8 --with-eval
+```
+
+- 답변과 함께 참조된 청크의 파일 경로, 페이지, 유사도, 텍스트를 출력
+- `--with-eval` 사용 시 LLM 자가평가 기반 품질/속도/최종 점수가 함께 표시됩니다.
 
 3. **(선택) API 서버 실행**
+
    ```bash
    # macOS / Linux
    python main.py serve --host 0.0.0.0 --port 8000
@@ -156,11 +171,27 @@ python -m pip install -e .
    # Windows PowerShell
    python main.py serve --host 0.0.0.0 --port 8000
    ```
+
    - `HOST`, `PORT` 환경변수를 설정하면 인자 없이도 실행 가능
    - FastAPI `/ingest`, `/query` 엔드포인트를 노출
 
 HTTP API를 직접 호출하려면 `serve` 커맨드로 서버를 띄운 뒤 기존 엔드포인트를
 사용하면 됩니다.
+
+## 평가 지표 설명
+
+- `Quality` (품질 점수): LLM 자가평가가 질문·답변·문맥을 비교해 0.0~1.0 범위로
+  산출한 정확도 점수입니다. 구현은 `prec/eval.py:71-104` (`ResponseEvaluator.evaluate`
+  및 `_score_quality`)에 정의되어 있습니다.
+- `Speed` (속도 점수): 실제 응답 지연 시간과 목표 지연 시간(`EVALUATION_TARGET_LATENCY`)
+  을 비교해 0.0~1.0 범위로 환산한 값입니다. 계산 공식은
+  `prec/eval.py:106-114`의 `_score_speed`에 있습니다.
+- `Final` (최종 점수): 품질과 속도 점수를 7:3 비율(환경 변수로 조절 가능)로
+  가중 평균한 결과입니다. `prec/eval.py:85-104`에서 합산합니다.
+- `Latency` (지연 시간): 답변을 생성하는 데 걸린 전체 시간을 초 단위로 기록한
+  값이며, CLI에서는 밀리초로 표시합니다. 측정은 `prec/service.py:100-118`에서 이뤄집니다.
+- `Reason` (평가 사유): LLM이 산출한 품질 점수에 대한 요약 근거로,
+  `prec/eval.py:71-104`에서 응답 JSON의 `reasoning` 값을 추출합니다.
 
 ## 추가 참고 사항
 
@@ -173,4 +204,7 @@ HTTP API를 직접 호출하려면 `serve` 커맨드로 서버를 띄운 뒤 기
   메시지를 확인해 테이블 스키마 또는 `OPENAI_EMBEDDING_MODEL`을 조정하세요.
 - PDF가 이미지 기반이면 `pypdf`가 텍스트를 추출하지 못하므로 별도의 OCR
   파이프라인이 필요할 수 있습니다.
+- 평가 기능을 활성화하면 OpenAI API 호출이 한 번 더 발생하므로 응답 시간이
+  증가할 수 있습니다. 필요에 따라 `ENABLE_EVALUATION` 환경 변수나
+  `--with-eval` 옵션을 선택적으로 사용하세요.
 - 상세 사용법과 개발 히스토리는 `USAGE_AND_NOTES.md`에서 확인할 수 있습니다.

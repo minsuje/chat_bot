@@ -4,6 +4,19 @@ import os
 from dataclasses import dataclass
 
 
+def _get_bool(value: str | None, default: bool) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _get_float(value: str | None, default: float) -> float:
+    try:
+        return float(value) if value is not None else default
+    except ValueError:
+        return default
+
+
 DEFAULT_CHAT_MODEL = "gpt-4.1-mini"
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_SUPABASE_TABLE = "policy_chunks"
@@ -30,6 +43,11 @@ class Settings:
     chunk_overlap: int = 200
     supabase_table: str = DEFAULT_SUPABASE_TABLE
     supabase_query_function: str = DEFAULT_SUPABASE_QUERY_FUNCTION
+    evaluation_enabled: bool = False
+    evaluation_model: str = DEFAULT_CHAT_MODEL
+    evaluation_quality_weight: float = 0.7
+    evaluation_speed_weight: float = 0.3
+    evaluation_target_latency: float = 5.0
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -59,5 +77,18 @@ class Settings:
             supabase_table=os.getenv("SUPABASE_TABLE", DEFAULT_SUPABASE_TABLE),
             supabase_query_function=os.getenv(
                 "SUPABASE_QUERY_FUNCTION", DEFAULT_SUPABASE_QUERY_FUNCTION
+            ),
+            evaluation_enabled=_get_bool(
+                os.getenv("ENABLE_EVALUATION"), default=False
+            ),
+            evaluation_model=os.getenv("EVALUATION_MODEL", DEFAULT_CHAT_MODEL),
+            evaluation_quality_weight=_get_float(
+                os.getenv("EVALUATION_QUALITY_WEIGHT"), default=0.7
+            ),
+            evaluation_speed_weight=_get_float(
+                os.getenv("EVALUATION_SPEED_WEIGHT"), default=0.3
+            ),
+            evaluation_target_latency=_get_float(
+                os.getenv("EVALUATION_TARGET_LATENCY"), default=5.0
             ),
         )
