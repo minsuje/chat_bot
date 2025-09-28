@@ -1,0 +1,15 @@
+[project]
+name = "prec"
+version = "0.1.0"
+description = "Policy chatbot backend MVP"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.112.0",
+    "uvicorn[standard]>=0.30.0; sys_platform != 'win32'",
+    "uvicorn>=0.30.0; sys_platform == 'win32'",
+    "openai>=1.35.0",
+    "pypdf>=4.2.0",
+    "supabase>=2.4.0",
+    "python-dotenv>=1.0.1"
+]
