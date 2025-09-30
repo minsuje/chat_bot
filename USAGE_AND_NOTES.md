@@ -31,7 +31,10 @@
    ```bash
    python main.py ask "임산부 의료비 지원 정책은 어떤 것이 있나요?" --top-k 8
    python main.py ask "사업 기간은 언제까지인가?" --top-k 8 --with-eval  # 평가 포함
+   python main.py ask "나는 장애가 있는데 지원해주는 금액이 있어?" --top-k 8 --with-rerank  # 리랭킹 포함
    ```
+   - `--with-rerank` 옵션은 교차 인코더로 후보 문단을 재정렬하며, 환경 변수
+     `ENABLE_RERANKING=true`로 기본 동작을 변경할 수도 있습니다.
 6. API 서버 (선택)
    ```bash
    python main.py serve --host 0.0.0.0 --port 8000
@@ -53,11 +56,11 @@ Supabase SQL 콘솔 또는 psql에서 아래 순서를 따라 데이터베이스
      chunk_index int not null,
      content text,
      metadata jsonb,
-     embedding vector(1536)
+     embedding vector(1024)
    );
    ```
    - 기존 테이블과 충돌할 경우 `alter table ...`로 컬럼 타입을 `text`, `int`,
-     `vector(1536)` 등에 맞춰 조정합니다.
+     `vector(1024)` 등에 맞춰 조정합니다.
 3. **(선택) IVF 인덱스 생성** — 검색 성능 향상을 위해 pgvector 인덱스를
    구축합니다.
    ```sql
@@ -66,7 +69,7 @@ Supabase SQL 콘솔 또는 psql에서 아래 순서를 따라 데이터베이스
      on policy_chunks using ivfflat (embedding vector_cosine_ops)
      with (lists = 100);
    ```
-   - 1536차원 모델(`text-embedding-3-small`) 기준이며, 다른 모델을 쓰면 해당
+   - 1024차원 모델(`upskyy/bge-m3-korean`) 기준이며, 다른 모델을 쓰면 해당
      차수에 맞춰 테이블과 인덱스를 다시 생성해야 합니다.
 4. **RPC 함수 정리 및 생성**
    ```sql
@@ -74,7 +77,7 @@ Supabase SQL 콘솔 또는 psql에서 아래 순서를 따라 데이터베이스
    drop function if exists match_policy_chunks(vector, int);
 
    create function match_policy_chunks(
-     query_embedding vector(1536),
+     query_embedding vector(1024),
      match_count int
    ) returns table (
      id text,
@@ -82,7 +85,7 @@ Supabase SQL 콘솔 또는 psql에서 아래 순서를 따라 데이터베이스
      chunk_index int,
      content text,
      metadata jsonb,
-     embedding vector(1536),
+     embedding vector(1024),
      similarity float
    ) language plpgsql as $$
    begin
@@ -114,7 +117,7 @@ create table if not exists policy_chunks (
   chunk_index int not null,
   content text,
   metadata jsonb,
-  embedding vector(1536)
+  embedding vector(1024)
 );
 ```
 
@@ -126,7 +129,7 @@ drop function if exists match_policy_chunks(vector, int, jsonb);
 drop function if exists match_policy_chunks(vector, int);
 
 create function match_policy_chunks(
-  query_embedding vector(1536),
+  query_embedding vector(1024),
   match_count int
 ) returns table (
   id text,
@@ -134,7 +137,7 @@ create function match_policy_chunks(
   chunk_index int,
   content text,
   metadata jsonb,
-  embedding vector(1536),
+  embedding vector(1024),
   similarity float
 ) language plpgsql as $$
 begin
@@ -172,7 +175,7 @@ $$;
 4. `.env` 자동 로드 및 README 초기 설명 업데이트.
 5. CLI 서브커맨드 도입(`ingest`, `ask`, `serve`) 및 `main.py`를 CLI 엔트리포인트로 변경.
 6. Supabase 테이블 업서트 시 필요한 필드(`doc_id`, `chunk_index`)를 반영하고 PDF 청크 메타데이터를 확장.
-7. `text-embedding-3-small`(1536차원) 모델로 기본값 변경 후 README, 설정, Supabase RPC 예제를 최신화.
+7. `upskyy/bge-m3-korean`(1024차원) 모델로 기본값 변경 후 README, 설정, Supabase RPC 예제를 최신화.
 8. Supabase 함수/스키마 충돌 시나리오에 대응하기 위한 예외 처리와 문서 보강.
 
 필요 시 이 문서를 참조하여 환경 재구성, 추가 개발, 배포 자동화 등을 진행할 수 있습니다.

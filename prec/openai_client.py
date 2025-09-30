@@ -4,14 +4,43 @@ from typing import Iterable, List, Sequence
 
 from openai import OpenAI
 
+try:  # pragma: no cover - optional dependency for local embeddings
+    from sentence_transformers import SentenceTransformer
+except ImportError:  # pragma: no cover
+    SentenceTransformer = None  # type: ignore[assignment]
+
 
 class OpenAIEmbeddingClient:
     def __init__(self, api_key: str, model: str) -> None:
-        self._client = OpenAI(api_key=api_key)
         self._model = model
+        self._backend = "openai"
+        self._client: OpenAI | None = None
+        self._st_model: SentenceTransformer | None = None
+
+        if self._should_use_sentence_transformers(model):
+            if SentenceTransformer is None:
+                raise ImportError(
+                    "sentence-transformers 패키지가 설치되어 있지 않습니다."
+                )
+            self._backend = "sentence_transformers"
+            self._st_model = SentenceTransformer(model)
+        else:
+            self._client = OpenAI(api_key=api_key)
+
+    def _should_use_sentence_transformers(self, model: str) -> bool:
+        return "/" in model or model.startswith("local:")
 
     def embed(self, inputs: Sequence[str]) -> List[List[float]]:
-        # OpenAI API only accepts non-empty inputs
+        if self._backend == "sentence_transformers":
+            assert self._st_model is not None
+            texts = [text if text.strip() else "" for text in inputs]
+            if not any(texts):
+                return [[] for _ in inputs]
+            embeddings = self._st_model.encode(texts, normalize_embeddings=True)
+            return [list(map(float, vector)) for vector in embeddings]
+
+        # OpenAI backend (default)
+        assert self._client is not None
         batched = [item for item in inputs if item.strip()]
         if not batched:
             return [[] for _ in inputs]

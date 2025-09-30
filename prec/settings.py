@@ -17,10 +17,20 @@ def _get_float(value: str | None, default: float) -> float:
         return default
 
 
-DEFAULT_CHAT_MODEL = "gpt-4.1-mini"
-DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+def _get_int(value: str | None, default: int | None) -> int | None:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+DEFAULT_CHAT_MODEL = "gpt-4.1"
+DEFAULT_EMBEDDING_MODEL = "upskyy/bge-m3-korean"
 DEFAULT_SUPABASE_TABLE = "policy_chunks"
 DEFAULT_SUPABASE_QUERY_FUNCTION = "match_policy_chunks"
+DEFAULT_RERANKER_MODEL = "BAAI/bge-reranker-large"
 
 
 # Load environment variables from a local .env file if present.
@@ -48,6 +58,9 @@ class Settings:
     evaluation_quality_weight: float = 0.7
     evaluation_speed_weight: float = 0.3
     evaluation_target_latency: float = 5.0
+    reranking_enabled: bool = False
+    reranker_model: str = DEFAULT_RERANKER_MODEL
+    rerank_top_n: int | None = 8
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -78,9 +91,7 @@ class Settings:
             supabase_query_function=os.getenv(
                 "SUPABASE_QUERY_FUNCTION", DEFAULT_SUPABASE_QUERY_FUNCTION
             ),
-            evaluation_enabled=_get_bool(
-                os.getenv("ENABLE_EVALUATION"), default=False
-            ),
+            evaluation_enabled=_get_bool(os.getenv("ENABLE_EVALUATION"), default=False),
             evaluation_model=os.getenv("EVALUATION_MODEL", DEFAULT_CHAT_MODEL),
             evaluation_quality_weight=_get_float(
                 os.getenv("EVALUATION_QUALITY_WEIGHT"), default=0.7
@@ -91,4 +102,7 @@ class Settings:
             evaluation_target_latency=_get_float(
                 os.getenv("EVALUATION_TARGET_LATENCY"), default=5.0
             ),
+            reranking_enabled=_get_bool(os.getenv("ENABLE_RERANKING"), default=False),
+            reranker_model=os.getenv("RERANKER_MODEL", DEFAULT_RERANKER_MODEL),
+            rerank_top_n=_get_int(os.getenv("RERANK_TOP_N"), default=5),
         )
