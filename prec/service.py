@@ -9,6 +9,7 @@ from .openai_client import OpenAIChatClient, OpenAIEmbeddingClient
 from .pdf_loader import build_chunks
 from .types import ChunkInput, DocumentChunk, IngestedDocument
 from .vector_store import RankedChunk, SupabaseVectorStore
+from .reranker import CrossEncoderReranker
 from .eval import EvaluationResult, ResponseEvaluator
 
 
@@ -17,6 +18,7 @@ SYSTEM_PROMPT = (
     "반드시 한국어로 답변하고, 제공된 문서 내용을 벗어나 추측하지 마세요. "
     "답변에는 중요 근거를 요약해 포함하고, 가능한 경우 출처 파일 이름과 페이지를 괄호로 표시하십시오. "
     "맥락에 정보가 없으면 '정보를 찾을 수 없습니다.'라고 말하세요."
+    "문서의 시행 날짜를 확인하고 질문 시간과 비교하여 시행 기간이 지난 내용은 해당 정보가 없다고 알려주고 질문과 연관된 내용이 있다면 해당 정책에 대해 간략하게 기간이 지난 내용을 알려줘"
 )
 
 
@@ -29,6 +31,11 @@ class ChatbotService:
         vector_store: SupabaseVectorStore,
         evaluator: ResponseEvaluator | None = None,
         evaluation_default: bool = False,
+        # rerank ---
+        reranker: CrossEncoderReranker | None = None,
+        rerank_default: bool = False,
+        rerank_top_n: int | None = None,
+        # ---
         chunk_size: int = 1200,
         chunk_overlap: int = 200,
     ) -> None:
@@ -37,6 +44,11 @@ class ChatbotService:
         self._vector_store = vector_store
         self._evaluator = evaluator
         self._evaluation_default = evaluation_default
+        # rerank --
+        self._reranker = reranker
+        self._rerank_default = rerank_default
+        self._rerank_top_n = rerank_top_n
+        # ----
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
         self._lock = RLock()
@@ -67,7 +79,9 @@ class ChatbotService:
         texts = [chunk.text for chunk in chunks]
         return self._embeddings.embed(texts)
 
-    def _build_context(self, ranked_chunks: Sequence[RankedChunk]) -> tuple[List[str], str]:
+    def _build_context(
+        self, ranked_chunks: Sequence[RankedChunk]
+    ) -> tuple[List[str], str]:
         sections: List[str] = []
         for item in ranked_chunks:
             metadata = item.chunk.metadata
@@ -92,7 +106,14 @@ class ChatbotService:
             {"role": "user", "content": user_message},
         ]
 
-    def answer(self, question: str, *, top_k: int = 8, with_evaluation: Optional[bool] = None) -> dict:
+    def answer(
+        self,
+        question: str,
+        *,
+        top_k: int = 20,
+        with_evaluation: Optional[bool] = None,
+        with_rerank: Optional[bool] = None,
+    ) -> dict:
         if not question.strip():
             raise ValueError("Question must not be empty")
         if self._vector_store.is_empty():
@@ -102,6 +123,24 @@ class ChatbotService:
         ranked = self._vector_store.top_k(query_embedding, k=top_k)
         if not ranked:
             ranked = self._vector_store.top_k(query_embedding, k=max(10, top_k))
+            # rerank --
+        vector_scores = {item.chunk.id: item.score for item in ranked}
+
+        should_rerank = (
+            with_rerank if with_rerank is not None else self._rerank_default
+        ) and self._reranker is not None
+
+        if should_rerank:
+            try:
+                ranked = self._reranker.rerank(
+                    question,
+                    ranked,
+                    top_n=self._rerank_top_n or top_k,
+                )
+            except Exception:
+                should_rerank = False
+                #  --------
+
         _, context_text = self._build_context(ranked)
         messages = self._build_prompt(question, context_text)
 
@@ -109,22 +148,23 @@ class ChatbotService:
         answer = self._chat.complete(messages)
         latency = perf_counter() - start
 
-        sources = [
-            {
+        sources = []
+        for item in ranked:
+            payload = {
                 "id": item.chunk.id,
                 "source": item.chunk.metadata.source,
                 "page": item.chunk.metadata.page,
                 "score": item.score,
                 "text": item.chunk.text,
             }
-            for item in ranked
-        ]
+            original_score = vector_scores.get(item.chunk.id)
+            if should_rerank and original_score is not None:
+                payload["vector_score"] = original_score
+            sources.append(payload)
 
         evaluation_result: EvaluationResult | None = None
         should_evaluate = (
-            with_evaluation
-            if with_evaluation is not None
-            else self._evaluation_default
+            with_evaluation if with_evaluation is not None else self._evaluation_default
         )
         if should_evaluate and self._evaluator is not None:
             evaluation_result = self._evaluator.evaluate(
@@ -134,7 +174,12 @@ class ChatbotService:
                 latency_seconds=latency,
             )
 
-        response: dict = {"answer": answer, "sources": sources, "latency_seconds": latency}
+        response: dict = {
+            "answer": answer,
+            "sources": sources,
+            "latency_seconds": latency,
+            "rerank_applied": should_rerank,
+        }
         if evaluation_result is not None:
             response["evaluation"] = evaluation_result.to_dict()
         return response

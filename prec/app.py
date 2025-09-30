@@ -9,6 +9,7 @@ from supabase import Client, create_client
 
 from .eval import ResponseEvaluator
 from .openai_client import OpenAIChatClient, OpenAIEmbeddingClient
+from .reranker import CrossEncoderReranker
 from .service import ChatbotService
 from .settings import Settings
 from .vector_store import SupabaseVectorStore
@@ -34,6 +35,12 @@ class QueryRequest(BaseModel):
         8, ge=1, le=20, description="Number of relevant chunks to retrieve"
     )
     with_evaluation: Optional[bool] = Field(
+        None, description="Enable evaluation scoring for this query."
+    )
+    with_rerank: Optional[bool] = Field(
+        None, description="Enable reranking for this query."
+    )
+    with_evaluation: Optional[bool] = Field(
         None,
         description="Set to true to enable evaluation scoring for this query.",
     )
@@ -45,6 +52,9 @@ class SourceChunk(BaseModel):
     page: Optional[int]
     score: float
     text: str
+    vector_score: Optional[float] = Field(
+        None, description="Original vector similarity score before reranking"
+    )
 
 
 class EvaluationResultSchema(BaseModel):
@@ -60,6 +70,7 @@ class QueryResponse(BaseModel):
     sources: List[SourceChunk]
     latency_seconds: float
     evaluation: Optional[EvaluationResultSchema] = None
+    rerank_applied: bool
 
 
 def create_chatbot_service(settings: Settings | None = None) -> ChatbotService:
@@ -91,12 +102,19 @@ def create_chatbot_service(settings: Settings | None = None) -> ChatbotService:
         target_latency=settings.evaluation_target_latency,
     )
 
+    reranker: CrossEncoderReranker | None = None
+    if settings.reranking_enabled:
+        reranker = CrossEncoderReranker(settings.reranker_model)
+
     return ChatbotService(
         embeddings=embeddings_client,
         chat=chat_client,
         vector_store=vector_store,
         evaluator=evaluator,
         evaluation_default=settings.evaluation_enabled,
+        reranker=reranker,
+        rerank_default=settings.reranking_enabled,
+        rerank_top_n=settings.rerank_top_n,
         chunk_size=settings.chunk_size,
         chunk_overlap=settings.chunk_overlap,
     )
@@ -136,6 +154,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 request.question,
                 top_k=request.top_k or 8,
                 with_evaluation=request.with_evaluation,
+                with_rerank=request.with_rerank,
             )
         except (ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -149,6 +168,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 page=item["page"],
                 score=item["score"],
                 text=item["text"],
+                vector_score=item.get("vector_score"),
             )
             for item in result["sources"]
         ]
@@ -162,6 +182,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             sources=sources,
             latency_seconds=result.get("latency_seconds", 0.0),
             evaluation=evaluation,
+            rerank_applied=bool(result.get("rerank_applied")),
         )
 
     return app

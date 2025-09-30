@@ -83,6 +83,7 @@ def _handle_query(args: argparse.Namespace) -> int:
             args.question,
             top_k=args.top_k,
             with_evaluation=args.with_eval,
+            with_rerank=args.with_rerank,
         )
     except Exception as exc:
         print(f"Query failed: {exc}", file=sys.stderr)
@@ -99,7 +100,14 @@ def _handle_query(args: argparse.Namespace) -> int:
         if source["page"] is not None:
             location = f"{location} (page {source['page']})"
         score = f"{source['score']:.4f}" if source.get("score") is not None else "n/a"
-        print(f"- [{score}] {location}\n  {source['text'][:300]}" + ("..." if len(source['text']) > 300 else ""))
+        vector_score = source.get("vector_score")
+        score_display = score
+        if vector_score is not None:
+            score_display = f"{score} (vector {vector_score:.4f})"
+        print(
+            f"- [{score_display}] {location}\n  {source['text'][:300]}"
+            + ("..." if len(source['text']) > 300 else "")
+        )
 
     evaluation = result.get("evaluation")
     if evaluation:
@@ -113,6 +121,9 @@ def _handle_query(args: argparse.Namespace) -> int:
             f"  Latency: {eval_latency_ms:.0f} ms\n"
             f"  Reason:  {evaluation['reasoning']}"
         )
+
+    if result.get("rerank_applied"):
+        print("\nRerank: enabled")
     return 0
 
 
@@ -163,6 +174,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--with-eval",
         action="store_true",
         help="Run LLM-based self-evaluation and scoring.",
+    )
+    query_parser.add_argument(
+        "--with-rerank",
+        action="store_true",
+        help="Apply cross-encoder reranking before answering.",
     )
     query_parser.set_defaults(func=_handle_query)
 
