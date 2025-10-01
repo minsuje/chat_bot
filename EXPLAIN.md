@@ -56,8 +56,19 @@
   환경 변수를 읽어 서비스에 전달.
 - `README.md`, `USAGE_AND_NOTES.md` — 사용법 및 Supabase 설정 지침 업데이트.
 
+## 임베딩 배치 처리 (2025-09-29)
+- `prec/settings.py:17-83` — `EMBED_BATCH_SIZE` 설정을 추가하고 기본값을 64로 지정.
+- `prec/service.py:34-120` — `_embed_chunks`가 청크를 배치 단위로 나눠 임베딩하여
+  메모리 사용량을 완화.
+- `prec/app.py:80-118` — 서비스 생성 시 배치 크기를 전달하도록 확장.
+- `.env` / README / USAGE — 배치 크기 조절 방법과 사용 예시를 문서화.
+
 ## 추가 참고
 - FastAPI `/query` 응답에 평가 결과를 포함하는 로직은 `prec/app.py:33-118`에서
   확인할 수 있습니다.
 - CLI `--with-eval` 옵션을 통해 평가를 실행할 때 출력 포맷은
   `prec/cli.py:83-111`에 정의되어 있습니다.
+Updated: 2025-09-30 19:27 KST — 임베딩 배치 처리(`EMBED_BATCH_SIZE`)를 도입하여
+`prec/service.py:34-120`에서 청크를 64개 단위로 임베딩하도록 변경하고,
+`prec/settings.py:1-112`, `prec/app.py:80-118`에 설정 전달을 추가했습니다.
+사용법: `.env`에 원하는 배치 크기를 지정 후 `python main.py ingest ...` 실행.

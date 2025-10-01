@@ -44,3 +44,10 @@
 - [x] 환경 변수 및 설정(`ENABLE_RERANKING`, `RERANKER_MODEL`, `RERANK_TOP_N`) 반영
 - [x] README/USAGE/EXPLAIN 문서에 리랭킹 사용법과 변경 내역 기록
 - [ ] 리랭킹 적용 후 응답 품질/속도 체감 테스트 및 결과 메모
+
+## 임베딩 배치 처리 (2025-09-29)
+- [x] 배치 임베딩 전략 및 기본 배치 크기 확정 (64개)
+- [x] `prec/settings.py`에 `EMBED_BATCH_SIZE` 설정 추가
+- [x] `ChatbotService._embed_chunks`에서 배치 단위 임베딩 구현
+- [x] `create_chatbot_service`에 배치 크기 전달 로직 반영
+- [x] README/USAGE/EXPLAIN 기록 및 사용법(현재 시각 포함) 업데이트

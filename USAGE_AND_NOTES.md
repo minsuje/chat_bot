@@ -35,6 +35,7 @@
    ```
    - `--with-rerank` 옵션은 교차 인코더로 후보 문단을 재정렬하며, 환경 변수
      `ENABLE_RERANKING=true`로 기본 동작을 변경할 수도 있습니다.
+   - 임베딩 배치 크기를 조정하려면 `.env`에 `EMBED_BATCH_SIZE=64`처럼 지정합니다.
 6. API 서버 (선택)
    ```bash
    python main.py serve --host 0.0.0.0 --port 8000
@@ -179,3 +180,7 @@ $$;
 8. Supabase 함수/스키마 충돌 시나리오에 대응하기 위한 예외 처리와 문서 보강.
 
 필요 시 이 문서를 참조하여 환경 재구성, 추가 개발, 배포 자동화 등을 진행할 수 있습니다.
+Updated: 2025-09-30 19:27 KST — 임베딩 배치 크기(`EMBED_BATCH_SIZE`)를 이용해
+청크 임베딩을 64개 단위로 처리하도록 변경했습니다. 관련 코드: `prec/service.py:34-120`,
+`prec/settings.py:1-112`, `prec/app.py:80-118`. 사용법: `.env`에 `EMBED_BATCH_SIZE=32`
+설정 후 `python main.py ingest /path/to/pdfs`로 실행하면 메모리 사용량을 제어할 수 있습니다.

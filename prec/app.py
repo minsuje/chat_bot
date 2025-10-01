@@ -115,6 +115,7 @@ def create_chatbot_service(settings: Settings | None = None) -> ChatbotService:
         reranker=reranker,
         rerank_default=settings.reranking_enabled,
         rerank_top_n=settings.rerank_top_n,
+        embedding_batch_size=settings.embedding_batch_size,
         chunk_size=settings.chunk_size,
         chunk_overlap=settings.chunk_overlap,
     )

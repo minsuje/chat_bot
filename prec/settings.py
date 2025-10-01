@@ -31,6 +31,7 @@ DEFAULT_EMBEDDING_MODEL = "upskyy/bge-m3-korean"
 DEFAULT_SUPABASE_TABLE = "policy_chunks"
 DEFAULT_SUPABASE_QUERY_FUNCTION = "match_policy_chunks"
 DEFAULT_RERANKER_MODEL = "BAAI/bge-reranker-large"
+DEFAULT_EMBED_BATCH_SIZE = 64
 
 
 # Load environment variables from a local .env file if present.
@@ -61,6 +62,7 @@ class Settings:
     reranking_enabled: bool = False
     reranker_model: str = DEFAULT_RERANKER_MODEL
     rerank_top_n: int | None = 8
+    embedding_batch_size: int = DEFAULT_EMBED_BATCH_SIZE
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -105,4 +107,9 @@ class Settings:
             reranking_enabled=_get_bool(os.getenv("ENABLE_RERANKING"), default=False),
             reranker_model=os.getenv("RERANKER_MODEL", DEFAULT_RERANKER_MODEL),
             rerank_top_n=_get_int(os.getenv("RERANK_TOP_N"), default=5),
+            embedding_batch_size=max(
+                1,
+                _get_int(os.getenv("EMBED_BATCH_SIZE"), DEFAULT_EMBED_BATCH_SIZE)
+                or DEFAULT_EMBED_BATCH_SIZE,
+            ),
         )

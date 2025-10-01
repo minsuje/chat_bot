@@ -69,6 +69,7 @@ python -m pip install -e .
 | `ENABLE_RERANKING`             | ❌   | `false`                | 기본적으로 리랭킹을 수행할지 여부                     |
 | `RERANKER_MODEL`               | ❌   | `BAAI/bge-reranker-large` | SentenceTransformer 교차 인코더 모델 이름             |
 | `RERANK_TOP_N`                 | ❌   | `5`                    | 리랭킹 후 유지할 후보 수                              |
+| `EMBED_BATCH_SIZE`             | ❌   | `64`                   | 임베딩을 한 번에 처리할 청크 수(배치 크기)            |
 
 루트 디렉터리에 `.env` 파일을 두면 자동으로 로드됩니다.
 
@@ -221,6 +222,8 @@ HTTP API를 직접 호출하려면 `serve` 커맨드로 서버를 띄운 뒤 기
 - 리랭킹은 추가 교차 인코더 추론을 수행하므로 응답 지연이 늘어날 수 있고,
   SentenceTransformer 모델이 설치되어 있어야 합니다. 필요 시
   `ENABLE_RERANKING` 또는 `--with-rerank` 옵션으로 제어하세요.
+- 임베딩 배치 크기(`EMBED_BATCH_SIZE`)를 조절하면 메모리 사용량과 처리 속도
+  사이의 균형을 맞출 수 있습니다. 기본 64개 단위로 청크를 나눠 임베딩합니다.
 - 상세 사용법과 개발 히스토리는 `USAGE_AND_NOTES.md`에서 확인할 수 있습니다.
 
 Updated: 2025-02-15 19:20 KST
@@ -230,6 +233,10 @@ SQL 예시(위 Supabase 설정 절차 참고)를 실행한 뒤 `delete from poli
 Updated: 2025-09-29 15:45 KST — 교차 인코더 리랭킹(`--with-rerank`) 및 환경 변수
 (`ENABLE_RERANKING`, `RERANKER_MODEL`, `RERANK_TOP_N`) 사용법을 추가하고 CLI/문서에
 반영했습니다.
+Updated: 2025-09-30 19:27 KST — 임베딩 배치 처리(`EMBED_BATCH_SIZE`, 기본 64)를
+추가하고 `prec/service.py:34-120`, `prec/app.py:80-118`, `prec/settings.py:1-112`
+에 반영했습니다. 사용법: `.env`에 `EMBED_BATCH_SIZE=32` 등으로 설정 후
+`python main.py ingest <폴더>`를 실행하면 메모리 사용량을 조절할 수 있습니다.
 
 ## Supabase upskyy/bge-m3-korean 업데이트
 

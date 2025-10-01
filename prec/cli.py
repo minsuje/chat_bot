@@ -167,8 +167,8 @@ def build_parser() -> argparse.ArgumentParser:
     query_parser.add_argument(
         "--top-k",
         type=int,
-        default=8,
-        help="Number of relevant chunks to retrieve (default: 8).",
+        default=20,
+        help="Number of relevant chunks to retrieve (default: 20).",
     )
     query_parser.add_argument(
         "--with-eval",
